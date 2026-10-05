@@ -6,6 +6,9 @@
 #include "Transportation.h"
 #include "Store.h"
 
+#include <vector>
+using namespace std;
+
 enum class ShipmentDestination {
     None,
     Factory,
@@ -22,6 +25,7 @@ class SupplyChain {
         int currentDay;
         ShipmentDestination destination;
         int dailyDemand;
+        int destinationIndex;
 
     public:
         SupplyChain();

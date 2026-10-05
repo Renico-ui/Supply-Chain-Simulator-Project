@@ -8,115 +8,173 @@
 #include <string>
 #include <algorithm>
 #include <random>
+#include <vector>
 
 using namespace std;
 
-SupplyChain::SupplyChain() : 
-supplier(100), 
-factory(20, 50, 100), 
-transportation(50, 0, 0), 
-store(10, 100), 
-currentDay(1), 
-destination(ShipmentDestination::None) {}
+SupplyChain::SupplyChain() :
+    currentDay(1),
+    destination(ShipmentDestination::None),
+    destinationIndex(-1)
+{
+    suppliers.emplace_back(100);
+    suppliers.emplace_back(150);
+    suppliers.emplace_back(200);
+
+    factories.emplace_back(20, 50, 100);
+    factories.emplace_back(30, 75, 150);
+
+    stores.emplace_back(10, 100);
+    stores.emplace_back(15, 150);
+    stores.emplace_back(20, 200);
+
+    transportations.emplace_back(50, 0, 0);
+}
 
 void SupplyChain::simulateDay()
 {
     random_device rd;
     mt19937 gen(rd());
     uniform_int_distribution<> distribution(1, 5);
-    dailyDemand = distribution(gen);
 
-    int sold = min(dailyDemand, store.getInventory());
-    int unmetDemand = dailyDemand - sold;
-
-    if (store.sellProducts(sold))
+    // Handle customer demand at every store
+    for (auto& store : stores)
     {
-    cout << "Day " << currentDay
-         << ": Demand: " << dailyDemand
-         << ", Sold: " << sold
-         << ", Unmet demand: " << unmetDemand
-         << ", Store inventory: " << store.getInventory()
-         << endl;
+        int demand = distribution(gen);
+        int sold = min(demand, store.getInventory());
+        int unmetDemand = demand - sold;
+
+        if (store.sellProducts(sold))
+        {
+            cout << "Day " << currentDay
+                 << ": Demand: " << demand
+                 << ", Sold: " << sold
+                 << ", Unmet demand: " << unmetDemand
+                 << ", Store inventory: " << store.getInventory()
+                 << endl;
+        }
     }
 
-    transportation.transportDay();
+    // Move the current shipment
+    transportations[0].transportDay();
 
-    if (transportation.hasArrived() && destination == ShipmentDestination::Factory)
+    // Check whether a shipment has arrived at a factory
+    for (int i = 0; i < factories.size(); i++)
     {
-        int cargo = transportation.getCargo();
-        if (transportation.unloadCargo(cargo))
+        if (transportations[0].hasArrived() &&
+            destination == ShipmentDestination::Factory &&
+            destinationIndex == i)
         {
-            factory.receiveMaterials(cargo);
-            cout << "Day " << currentDay << ": Shipment has arrived at Factory." << endl;
+            Factory& factory = factories[i];
 
-            if (factory.makeProduct(10))
+            int cargo = transportations[0].getCargo();
+
+            if (transportations[0].unloadCargo(cargo))
             {
-                cout << "Day " << currentDay
-                     << ": Factory produced 10 products." << endl;
+                factory.receiveMaterials(cargo);
 
-                if (factory.sendProducts(10))
+                cout << "Day " << currentDay
+                     << ": Shipment has arrived at Factory "
+                     << i << "." << endl;
+
+                if (factory.makeProduct(10))
                 {
-                    cout << "Sending to Store..." << endl;
-                    transportation.transport(10);
-                    transportation.startTrip(2);
-                    destination = ShipmentDestination::Store;
-                    cout << "Day " << currentDay << ": Shipment sent to the Store." << endl;
+                    cout << "Day " << currentDay
+                         << ": Factory produced 10 products." << endl;
+
+                    if (factory.sendProducts(10))
+                    {
+                        cout << "Sending to Store..." << endl;
+
+                        transportations[0].transport(10);
+                        transportations[0].startTrip(2);
+
+                        destination = ShipmentDestination::Store;
+                        destinationIndex = 0;
+
+                        cout << "Day " << currentDay
+                             << ": Shipment sent to Store "
+                             << destinationIndex << "." << endl;
+
+                        break;
+                    }
                 }
             }
         }
     }
-        if (!transportation.hasArrived() &&
-            destination == ShipmentDestination::Factory)
-        {
 
-            cout << "Day " << currentDay
-                 << ": Shipment is traveling. "
-                 << transportation.getDaysToArrive()
-                 << " days remaining." << endl;
-        }
+    // Shipment is traveling to a factory
+    if (!transportations[0].hasArrived() &&
+        destination == ShipmentDestination::Factory)
+    {
+        cout << "Day " << currentDay
+             << ": Shipment is traveling. "
+             << transportations[0].getDaysToArrive()
+             << " days remaining." << endl;
+    }
 
-        if (transportation.hasArrived() && destination == ShipmentDestination::Store)
+    // Check whether a shipment has arrived at a store
+    for (int i = 0; i < stores.size(); i++)
+    {
+        if (transportations[0].hasArrived() &&
+            destination == ShipmentDestination::Store &&
+            destinationIndex == i)
         {
-            int cargo = transportation.getCargo();
-            if (transportation.unloadCargo(cargo))
+            Store& store = stores[i];
+
+            int cargo = transportations[0].getCargo();
+
+            if (transportations[0].unloadCargo(cargo))
             {
                 if (store.receiveProducts(cargo))
                 {
-                    cout << "Day " << currentDay << ": Shipment has arrived at Store." << endl;
+                    cout << "Day " << currentDay
+                         << ": Shipment has arrived at Store "
+                         << i << "." << endl;
+
                     destination = ShipmentDestination::None;
-                    
+                    destinationIndex = -1;
+
+                    break;
                 }
             }
         }
+    }
 
-        if (!transportation.hasArrived() &&
-            destination == ShipmentDestination::Store)
-        {
+    // Shipment is traveling to a store
+    if (!transportations[0].hasArrived() &&
+        destination == ShipmentDestination::Store)
+    {
+        cout << "Day " << currentDay
+             << ": Shipment is traveling to Store. "
+             << transportations[0].getDaysToArrive()
+             << " days remaining." << endl;
+    }
 
-            cout << "Day " << currentDay
-                 << ": Shipment is traveling to Store. "
-                 << transportation.getDaysToArrive()
-                 << " days remaining." << endl;
-        }
-
-
+    // If there is no current shipment, a supplier can send one
+    for (auto& supplier : suppliers)
+    {
         if (destination == ShipmentDestination::None &&
-            transportation.getCargo() == 0)
+            transportations[0].getCargo() == 0)
         {
             if (supplier.supply(10))
             {
                 cout << "Supplier supplied 10 to factory!!" << endl;
 
-                transportation.transport(10);
-                transportation.startTrip(2);
+                transportations[0].transport(10);
+                transportations[0].startTrip(2);
 
                 destination = ShipmentDestination::Factory;
+                destinationIndex = 0;
 
                 cout << "Day " << currentDay
-                     << ": Shipment is sent to Factory." << endl;
+                     << ": Shipment is sent to Factory "
+                     << destinationIndex << "." << endl;
+
+                break;
             }
         }
-
-        currentDay++;
     }
 
+    currentDay++;
+}
