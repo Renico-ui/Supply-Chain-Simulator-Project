@@ -14,15 +14,15 @@ enum class ShipmentDestination {
 
 class SupplyChain {
     private:
-        Supplier supplier;
-        Factory factory;
-        Transportation transportation;
-        Store store;
+        vector<Supplier> suppliers;
+        vector<Factory> factories;
+        vector<Transportation> transportations;
+        vector<Store> stores;
 
         int currentDay;
         ShipmentDestination destination;
         int dailyDemand;
-        
+
     public:
         SupplyChain();
         void simulateDay();
